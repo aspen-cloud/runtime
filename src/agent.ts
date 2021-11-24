@@ -61,6 +61,7 @@ export class Agent {
   private readonly agentRef: Reference;
   readonly name: string;
   readonly description: string;
+  readonly aggregationKeys: Set<string>;
   readonly viewKeys: Set<string>;
   readonly actionKeys: Set<string>;
   readonly automationTriggers: Map<string, Trigger>;
@@ -99,6 +100,13 @@ export class Agent {
       copy: true,
       accessors: true,
     });
+
+    const aggregationKeyList = this.context.evalSync(
+      "agent.default.aggregations ? Object.keys(agent.default.aggregations): [];",
+      { copy: true }
+    );
+    this.aggregationKeys = new Set(aggregationKeyList);
+
     const viewKeyList = this.context.evalSync(
       "agent.default.views ? Object.keys(agent.default.views): [];",
       { copy: true }
@@ -193,6 +201,84 @@ export class Agent {
       reference: true,
     });
 
+    await this._setupViewExecutionEnvironment();
+
+    const aspenRef = this.context.global.getSync("aspen");
+    try {
+      const results = await viewRef.applySync(
+        null,
+        [params, aspenRef.derefInto()],
+        {
+          arguments: { copy: true },
+          result: { promise: true, copy: true },
+        }
+      );
+      return results;
+    } catch (e) {
+      throw new Error(`Error in view: ${e}`);
+    }
+  }
+
+  async runAction(actionName: string, params: any): Promise<any> {
+    if (!this.actionKeys.has(actionName))
+      throw new Error("Unrecognized action.");
+
+    await setupActionExectionEnvironment(this.context, this.aspenGateway);
+
+    const actionRef = await (
+      await this.agentRef.get("actions", { reference: true })
+    ).get(actionName, { reference: true });
+
+    const aspenRef = this.context.global.getSync("aspen");
+    const result = await actionRef.apply(
+      undefined,
+      [params, aspenRef.derefInto()],
+      {
+        arguments: { copy: true },
+        result: { copy: true, promise: true },
+      }
+    );
+
+    return result;
+  }
+
+  async processAggregation(aggregationName: string, params: AggregationParams) {
+    await this._setupViewExecutionEnvironment();
+
+    const aspenRef = this.context.global.getSync("aspen", { reference: true });
+
+    return await aspenRef
+      .getSync("getAggregation", { reference: true })
+      .apply(undefined, [aggregationName, params], {
+        arguments: { copy: true },
+        result: { promise: true, copy: true },
+      });
+  }
+
+  async getConfig() {}
+
+  async setConfig(key: string, value: any) {}
+
+  async runAutomation(automationName: string, params: any) {
+    if (!this.automationTriggers.has(automationName))
+      //throw new ExternalError("Unrecognized automation.");
+      throw new Error("Unrecognized automation");
+
+    await setupActionExectionEnvironment(this.context, this.aspenGateway);
+
+    const actionRef = await this.agentRef
+      .getSync("automations", { reference: true })
+      .getSync(automationName, { reference: true })
+      .get("action", { reference: true });
+
+    const aspenRef = this.context.global.getSync("aspen");
+    await actionRef.apply(undefined, [params, aspenRef.derefInto()], {
+      arguments: { copy: true },
+      result: { copy: true, promise: true },
+    });
+  }
+
+  private async _setupViewExecutionEnvironment() {
     await this.context.global.set("aspen", {}, { copy: true });
 
     this.context.global.setSync(
@@ -274,71 +360,10 @@ export class Agent {
     );
 
     const setupCode = `
-          aspen.getAggregation = async (name, params) => await getAggregationRef.apply(undefined, [name, params], {arguments: {copy: true}, result: { promise: true, copy: true }});
-      `;
+            aspen.getAggregation = async (name, params) => await getAggregationRef.apply(undefined, [name, params], {arguments: {copy: true}, result: { promise: true, copy: true }});
+        `;
 
     await this.context.eval(setupCode);
-
-    const aspenRef = this.context.global.getSync("aspen");
-    try {
-      const results = await viewRef.applySync(
-        null,
-        [params, aspenRef.derefInto()],
-        {
-          arguments: { copy: true },
-          result: { promise: true, copy: true },
-        }
-      );
-      return results;
-    } catch (e) {
-      throw new Error(`Error in view: ${e}`);
-    }
-  }
-
-  async runAction(actionName: string, params: any): Promise<any> {
-    if (!this.actionKeys.has(actionName))
-      throw new Error("Unrecognized action.");
-
-    await setupActionExectionEnvironment(this.context, this.aspenGateway);
-
-    const actionRef = await (
-      await this.agentRef.get("actions", { reference: true })
-    ).get(actionName, { reference: true });
-
-    const aspenRef = this.context.global.getSync("aspen");
-    const result = await actionRef.apply(
-      undefined,
-      [params, aspenRef.derefInto()],
-      {
-        arguments: { copy: true },
-        result: { copy: true, promise: true },
-      }
-    );
-
-    return result;
-  }
-
-  async getConfig() {}
-
-  async setConfig(key: string, value: any) {}
-
-  async runAutomation(automationName: string, params: any) {
-    if (!this.automationTriggers.has(automationName))
-      //throw new ExternalError("Unrecognized automation.");
-      throw new Error("Unrecognized automation");
-
-    await setupActionExectionEnvironment(this.context, this.aspenGateway);
-
-    const actionRef = await this.agentRef
-      .getSync("automations", { reference: true })
-      .getSync(automationName, { reference: true })
-      .get("action", { reference: true });
-
-    const aspenRef = this.context.global.getSync("aspen");
-    await actionRef.apply(undefined, [params, aspenRef.derefInto()], {
-      arguments: { copy: true },
-      result: { copy: true, promise: true },
-    });
   }
 }
 
