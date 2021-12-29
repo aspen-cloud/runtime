@@ -14,7 +14,12 @@ const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 async function initVM(codeBundle: string) {
-  const isolate = new Isolate();
+  const isolate = new Isolate({
+    onCatastrophicError: (msg) => {
+      // TODO support specialized handling
+      throw new Error(`Catastrophic V8 Error: ${msg}`);
+    },
+  });
   const agentScript = await isolate.compileScript(codeBundle);
   const context = await isolate.createContext();
   await agentScript.run(context);
@@ -230,14 +235,18 @@ export class Agent {
           lastSeen,
           processor: (event) => {
             latestSeen = event.id;
-            accumulator = reducerRef.applySync(
-              this.context,
-              [accumulator.derefInto(), event],
-              {
-                arguments: { copy: true },
-                result: { reference: true },
-              }
-            );
+            try {
+              accumulator = reducerRef.applySync(
+                this.context,
+                [accumulator.derefInto(), event],
+                {
+                  arguments: { copy: true },
+                  result: { reference: true },
+                }
+              );
+            } catch (e) {
+              throw new Error(`Error in reducer: ${e}`);
+            }
           },
           tags: params.tags ?? {},
         });
@@ -269,17 +278,19 @@ export class Agent {
     await this.context.eval(setupCode);
 
     const aspenRef = this.context.global.getSync("aspen");
-
-    const results = await viewRef.applySync(
-      null,
-      [params, aspenRef.derefInto()],
-      {
-        arguments: { copy: true },
-        result: { promise: true, copy: true },
-      }
-    );
-
-    return results;
+    try {
+      const results = await viewRef.applySync(
+        null,
+        [params, aspenRef.derefInto()],
+        {
+          arguments: { copy: true },
+          result: { promise: true, copy: true },
+        }
+      );
+      return results;
+    } catch (e) {
+      throw new Error(`Error in view: ${e}`);
+    }
   }
 
   async runAction(actionName: string, params: any): Promise<any> {
