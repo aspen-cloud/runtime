@@ -176,6 +176,8 @@ export class Agent {
         this.jobManager.removeJob(jobKey);
       },
       createResource: async () => this.unilog.createResource(),
+      notify: async (message: string) =>
+        this.unilog.createNotification(this.agentId, message),
     };
   }
 
