@@ -184,14 +184,15 @@ export class Agent {
         this.jobManager.removeJob(jobKey);
       },
       createResource: async () => this.unilog.createResource(),
-      notify: async (message: string) =>
-        this.unilog.createNotification(this.agentId, message),
+      notify: async (message: string) => {
+        this.unilog.createNotification(this.agentId, message);
+      },
     };
   }
 
   async getView(viewName: string, params?: Record<string, string>) {
     if (!this.viewKeys.has(viewName))
-      throw new Error("Unrecognized view name.");
+      throw new Error(`Unrecognized view: ${viewName}`);
 
     const viewRef = this.agentRef
       .getSync("views", { reference: true })
@@ -221,7 +222,7 @@ export class Agent {
 
   async runAction(actionName: string, params: any): Promise<any> {
     if (!this.actionKeys.has(actionName))
-      throw new Error("Unrecognized action.");
+      throw new Error(`Unrecognized action: ${actionName}`);
 
     await setupActionExectionEnvironment(this.context, this.aspenGateway);
 
@@ -395,7 +396,11 @@ async function setupActionExectionEnvironment(
     reference: true,
   });
 
-  context.global.set("aspen", {}, { copy: true });
+  await context.global.set("notifyRef", gateway.notify, {
+    reference: true,
+  });
+
+  await context.global.set("aspen", {}, { copy: true });
 
   const setupCode = `
   aspen.fetch = async (input, init, resultParse) => await fetchRef.apply(undefined, [input, init, resultParse], { arguments: { copy: true }, result: { promise: true, copy: true } });
@@ -404,6 +409,7 @@ async function setupActionExectionEnvironment(
   aspen.scheduleAction = async (actionKey, params, runAt, options) => await scheduleActionRef.apply(undefined, [actionKey, params, runAt, options], { arguments: { copy: true }, result: { promise: true, copy: true } });
   aspen.unscheduleAction = async (jobKey) => await unscheduleActionRef.apply(undefined, [jobKey], { arguments: { copy: true }, result: { promise: true, copy: true } });
   aspen.createResource = async () => createResourceRef.apply(undefined, [], { result: { copy: true, promise: true } });
+  aspen.notify = async (message, path) => await notifyRef.apply(undefined, [message, path], { arguments: { copy: true }, result: { promise: true, copy: true } });
 `;
 
   await context.eval(setupCode);
