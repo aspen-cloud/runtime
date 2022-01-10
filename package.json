@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "isolated-vm": "4.3.5",
+    "nanoid": "^3.1.30",
     "node-fetch": "^3.1.0"
   },
   "devDependencies": {

@@ -119,7 +119,12 @@ export class Agent {
         runAt: Date,
         options?: SchedulerOptions
       ) => {
-        return this.jobManager.addJob({ actionKey, params, runAt, options });
+        return this.jobManager.addJob(this.agentId, {
+          actionKey,
+          params,
+          runAt,
+          options,
+        });
       },
       unscheduleAction: async (jobKey: string) => {
         this.jobManager.removeJob(jobKey);

@@ -178,7 +178,12 @@ export class Agent {
         runAt: Date,
         options?: SchedulerOptions
       ) => {
-        return this.jobManager.addJob({ actionKey, params, runAt, options });
+        return this.jobManager.addJob(this.agentId, {
+          actionKey,
+          params,
+          runAt,
+          options,
+        });
       },
       unscheduleAction: async (jobKey: string) => {
         this.jobManager.removeJob(jobKey);
@@ -262,8 +267,7 @@ export class Agent {
 
   async runAutomation(automationName: string, params: any) {
     if (!this.automationTriggers.has(automationName))
-      //throw new ExternalError("Unrecognized automation.");
-      throw new Error("Unrecognized automation");
+      throw new Error(`Unrecognized automation: ${automationName}`);
 
     await setupActionExectionEnvironment(this.context, this.aspenGateway);
 
