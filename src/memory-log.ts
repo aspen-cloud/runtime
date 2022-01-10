@@ -1,4 +1,4 @@
-import { Log, LogEvent, UniversalLog } from "@aspen.cloud/agent-typings";
+import { Log, UniversalLog } from "@aspen.cloud/agent-typings";
 
 interface MemoryEvent extends Log<any> {
   agentId: string;
@@ -9,6 +9,7 @@ interface MemoryEvent extends Log<any> {
 export default class MemoryLog implements UniversalLog {
   private log: MemoryEvent[] = [];
   private continuations = new Map<string, { lastSeen: number; value: any }>();
+  private subscribers: Set<(evt: MemoryEvent) => void> = new Set();
 
   constructor() {}
 
@@ -25,16 +26,18 @@ export default class MemoryLog implements UniversalLog {
     tags?: Record<string, string> | undefined;
     resourceId?: string | undefined;
   }) {
-    this.log.push({
+    const evt = {
       agentId,
-      data: payload,
+      data: { ...payload, type },
       tags:
         resourceId == null ? { ...tags } : { ...tags, _resourceId: resourceId },
       resourceId,
       type,
       inserted_at: new Date(),
       id: this.log.length + 1,
-    });
+    };
+    this.log.push(evt);
+    Array.from(this.subscribers.values()).forEach((callback) => callback(evt));
   }
 
   async processLogsSince({
@@ -84,6 +87,13 @@ export default class MemoryLog implements UniversalLog {
     return `${agentId}-${JSON.stringify(name)}-${JSON.stringify(tags)}`;
   }
 
+  subscribeToEvents(callback: (evt: MemoryEvent) => void) {
+    this.subscribers.add(callback);
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+
   async getContinuation({
     agentId,
     name,
@@ -126,5 +136,9 @@ export default class MemoryLog implements UniversalLog {
 
   async createResource() {
     return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString();
+  }
+
+  async createNotification() {
+    return;
   }
 }
