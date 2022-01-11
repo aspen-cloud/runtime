@@ -207,5 +207,10 @@ export class Agent {
 
   async setConfig(key: string, value: any) {}
 
-  async runAutomation(automationName: string, params: any) {}
+  async runAutomation(automationName: string, params: any) {
+    const { action } = (this.userAgent.automations ?? {})[automationName];
+    if (!action)
+      throw new Error(`Couldn't run action for automation: ${automationName}`);
+    return action(params, this.aspenGateway);
+  }
 }
